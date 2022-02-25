@@ -14,7 +14,7 @@
 	<artifactId>spring-boot-rest-example</artifactId>
 	<version>1.0.0</version>
 	<name>spring-boot-rest-example</name>
-	<description>Spring Boot Rest API Example</description>
+	<description>Example of Spring Boot Rest with OpenAPI documentation</description>
 
 	<properties>
 		<java.version>11</java.version>
@@ -56,8 +56,13 @@
         <dependency>
     		<groupId>org.springdoc</groupId>
 			<artifactId>springdoc-openapi-ui</artifactId>
-			<version>1.6.3</version>
+			<version>1.6.6</version>
 		</dependency> 	
+		<dependency>
+    		<groupId>org.springdoc</groupId>
+    		<artifactId>springdoc-openapi-data-rest</artifactId>
+    		<version>1.6.6</version>
+		</dependency>
 		<dependency>
 			<groupId>com.h2database</groupId>
 			<artifactId>h2</artifactId>

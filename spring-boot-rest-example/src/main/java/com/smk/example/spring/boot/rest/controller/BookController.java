@@ -20,6 +20,7 @@ import javax.validation.Validator;
 import javax.validation.constraints.Min;
 
 import org.modelmapper.ModelMapper;
+import org.springdoc.api.annotations.ParameterObject;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -48,6 +49,13 @@ import com.smk.example.spring.boot.rest.model.BookModel;
 import com.smk.example.spring.boot.rest.model.BookModel.OnUpdate;
 import com.smk.example.spring.boot.rest.service.BookService;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.ArraySchema;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import lombok.extern.slf4j.Slf4j;
 
 @RestController
@@ -57,48 +65,61 @@ import lombok.extern.slf4j.Slf4j;
 public class BookController {
 
 	private final ObjectMapper objectMapper;
-	
+
 	private final Validator validator;
-	
+
 	private final BookService bookService;
-	
+
 	public BookController(BookService bookService, ObjectMapper objectMapper, Validator validator) {
 		this.bookService = bookService;
 		this.objectMapper = objectMapper;
 		this.validator = validator;
 	}
 
+	@Operation(summary = "Get book by ID")
+	@ApiResponses(value = { @ApiResponse(responseCode = "200", description = "Book is found", content = {
+			@Content(mediaType = "application/json", schema = @Schema(implementation = BookModel.class)) }) })
 	@GetMapping(path = "/{id}", produces = MediaType.APPLICATION_JSON_VALUE)
 	@ResponseStatus(HttpStatus.OK)
-	public BookModel getBook(@PathVariable @Min(1) Long id) {
+	public BookModel getBook(@Parameter(description = "ID of book to search") @PathVariable @Min(1) Long id) {
 		log.info("HTTP GET Book with id {}", id);
 		ModelMapper modelMapper = new ModelMapper();
 		Book book = bookService.getBookById(id).orElseThrow(() -> new BookNotFoundException(id));
 		BookModel bookModel = modelMapper.map(book, BookModel.class);
 		return bookModel;
 	}
-	
+
+	@Operation(summary = "Search book by title and author (optional)")
+	@ApiResponses(value = { @ApiResponse(responseCode = "200", description = "Book is found", content = {
+			@Content(mediaType = "application/json", schema = @Schema(implementation = BookModel.class)) }) })
 	@GetMapping(path = "/search", produces = MediaType.APPLICATION_JSON_VALUE)
 	@ResponseStatus(HttpStatus.OK)
-	public BookModel getBookByTitleAndOptionalAuthor(@RequestParam String title, @RequestParam(required = false) Optional<String> author) {
+	public BookModel getBookByTitleAndOptionalAuthor(
+			@Parameter(description = "Title of book to search") @RequestParam String title,
+			@Parameter(description = "Author of book to search (optional)") @RequestParam(required = false) Optional<String> author) {
 		log.info("HTTP GET Book with title and optional author");
 		ModelMapper modelMapper = new ModelMapper();
 		Book book;
 		if (author.isPresent())
-			book = bookService.getBookByTitleAndAuthor(title, author.get()).orElseThrow(() -> new BookNotFoundException(title, author.get()));
-		else 
+			book = bookService.getBookByTitleAndAuthor(title, author.get())
+					.orElseThrow(() -> new BookNotFoundException(title, author.get()));
+		else
 			book = bookService.getBookByTitle(title).orElseThrow(() -> new BookNotFoundException(title));
 		BookModel bookModel = modelMapper.map(book, BookModel.class);
 		return bookModel;
 	}
 
+	@Operation(summary = "Get all books")
+	@ApiResponses(value = { @ApiResponse(responseCode = "200", description = "All books are found", content = {
+			@Content(mediaType = "application/json", array = @ArraySchema(schema = @Schema(implementation = BookModel.class))) }) })
 	@GetMapping(path = "/", produces = MediaType.APPLICATION_JSON_VALUE)
 	@ResponseStatus(HttpStatus.OK)
 	public List<BookModel> getAllBooks() {
 		log.info("HTTP GET all Book");
 		ModelMapper modelMapper = new ModelMapper();
 		List<Book> books = bookService.getAllBooks();
-		if (CollectionUtils.isEmpty(books)) throw new NoBookFoundException();
+		if (CollectionUtils.isEmpty(books))
+			throw new NoBookFoundException();
 		List<BookModel> bookModels = books.stream().map(book -> {
 			BookModel bookModel = modelMapper.map(book, BookModel.class);
 			return bookModel;
@@ -107,107 +128,131 @@ public class BookController {
 		return bookModels;
 	}
 
+	@Operation(summary = "Get all books by pages")
+	@ApiResponses(value = { @ApiResponse(responseCode = "200", description = "All books are found") })
 	@GetMapping(produces = MediaType.APPLICATION_JSON_VALUE)
 	@ResponseStatus(HttpStatus.OK)
-	public Page<BookModel> getAllBooks(Pageable pageable) {
+	public Page<BookModel> getAllBooks(@ParameterObject Pageable pageable) {
 		log.info("HTTP GET all Book by Page");
 		ModelMapper modelMapper = new ModelMapper();
 		Page<Book> books = bookService.getAllBooks(pageable);
-		if (CollectionUtils.isEmpty(books.getContent())) throw new NoBookFoundException();
+		if (CollectionUtils.isEmpty(books.getContent()))
+			throw new NoBookFoundException();
 		Page<BookModel> bookModels = books.map(book -> {
 			BookModel bookModel = modelMapper.map(book, BookModel.class);
 			return bookModel;
 		});
 		return bookModels;
 	}
-	
+
+	@Operation(summary = "Add new book")
+	@ApiResponses(value = { @ApiResponse(responseCode = "201", description = "Book added successfully", content = {
+			@Content(mediaType = "application/json", schema = @Schema(implementation = BookModel.class)) }) })
 	@PostMapping(path = "/", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
 	@ResponseStatus(HttpStatus.CREATED)
-	public BookModel createBook(@Valid @RequestBody BookModel bookModel) {
+	public BookModel createBook(
+			@Valid @io.swagger.v3.oas.annotations.parameters.RequestBody(description = "JSON document of book to add", required = true, content = @Content(schema = @Schema(implementation = BookModel.class))) @RequestBody BookModel bookModel) {
 		log.info("HTTP POST new Book {}", bookModel);
 		return saveBook(bookModel, new Book());
 	}
-	
+
+	@Operation(summary = "Update book by ID")
+	@ApiResponses(value = {
+			@ApiResponse(responseCode = "201", description = "Book added successfully", content = {
+					@Content(mediaType = "application/json", schema = @Schema(implementation = BookModel.class)) }),
+			@ApiResponse(responseCode = "200", description = "Book updated successfully", content = {
+					@Content(mediaType = "application/json", schema = @Schema(implementation = BookModel.class)) }) })
 	@PutMapping(path = "/{id}", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
-	public ResponseEntity<BookModel> updateBook(@Validated(OnUpdate.class) @RequestBody BookModel bookModel, @PathVariable @Min(1) Long id) {
+	public ResponseEntity<BookModel> updateBook(
+			@Parameter(description = "ID of the book to update") @PathVariable @Min(1) Long id,
+			@Validated(OnUpdate.class) @io.swagger.v3.oas.annotations.parameters.RequestBody(description = "JSON document of book to update (need to include all fields even if they have no changes)", required = true, content = @Content(schema = @Schema(implementation = BookModel.class))) @RequestBody BookModel bookModel) {
 		log.info("HTTP PUT Book {})", bookModel);
 		return bookService.getBookById(id).map(book -> {
 			return new ResponseEntity<BookModel>(saveBook(bookModel, book), HttpStatus.OK);
 		}).orElseGet(() -> {
 			return new ResponseEntity<BookModel>(saveBook(bookModel, new Book()), HttpStatus.CREATED);
-		});		
+		});
 	}
-	
-	@PatchMapping(path = "/{id}", consumes = "application/merge-patch+json")
+
+	@Operation(summary = "Merge book by ID")
+	@ApiResponses(value = { @ApiResponse(responseCode = "200", description = "Book updated successfully", content = {
+			@Content(mediaType = "application/json", schema = @Schema(implementation = BookModel.class)) }) })
+	@PatchMapping(path = "/merge/{id}", consumes = "application/merge-patch+json", produces = MediaType.APPLICATION_JSON_VALUE)
 	@ResponseStatus(HttpStatus.OK)
-	public BookModel mergeBook(@PathVariable @Min(1) Long id, @RequestBody String payload) {
+	public BookModel mergeBook(@Parameter(description = "ID of book to merge") @PathVariable @Min(1) Long id,
+			@io.swagger.v3.oas.annotations.parameters.RequestBody(description = "JSON document that contains field(s) of book to update (no need to include fields that have no changes even if they are specified as required)", required = true, content = @Content(schema = @Schema(implementation = BookModel.class))) @RequestBody String payload) {
 		log.info("HTTP MERGE PATCH Book with id {}", id);
 		JsonMergePatch patchDocument;
-		try(JsonReader reader = Json.createReader(new StringReader(payload))) {
+		try (JsonReader reader = Json.createReader(new StringReader(payload))) {
 			patchDocument = Json.createMergePatch(reader.readValue());
 		}
 		ModelMapper modelMapper = new ModelMapper();
 		Book book = bookService.getBookById(id).orElseThrow(() -> new BookNotFoundException(id));
 		BookModel bookModel = modelMapper.map(book, BookModel.class);
-		//convert model targeted for patching to JSON document
+		// convert model targeted for patching to JSON document
 		JsonStructure target = objectMapper.convertValue(bookModel, JsonStructure.class);
-		//apply JSON patch onto JSON document of target model
+		// apply JSON patch onto JSON document of target model
 		JsonValue patched = patchDocument.apply(target);
-		//convert JSON document of target model back to model
+		// convert JSON document of target model back to model
 		BookModel patchedBookModel = objectMapper.convertValue(patched, BookModel.class);
 		Set<ConstraintViolation<BookModel>> violations = validator.validate(patchedBookModel);
-	    if (!violations.isEmpty()) {
-	        throw new ConstraintViolationException(violations);
-	    }
+		if (!violations.isEmpty()) {
+			throw new ConstraintViolationException(violations);
+		}
 		return saveBook(patchedBookModel, book);
 	}
-	
-	@PatchMapping(path = "/{id}", consumes = "application/json-patch+json")
+
+	@Operation(summary = "Patch book by ID")
+	@ApiResponses(value = { @ApiResponse(responseCode = "200", description = "Book updated successfully", content = {
+			@Content(mediaType = "application/json", schema = @Schema(implementation = BookModel.class)) }) })
+	@PatchMapping(path = "/patch/{id}", consumes = "application/json-patch+json", produces = MediaType.APPLICATION_JSON_VALUE)
 	@ResponseStatus(HttpStatus.OK)
-	public BookModel patchBook(@PathVariable @Min(1) Long id, @RequestBody String payload) {	
+	public BookModel patchBook(@Parameter(description = "ID of book to patch") @PathVariable @Min(1) Long id,
+			@io.swagger.v3.oas.annotations.parameters.RequestBody(description = "JSONPatch document to patch book", required = true, content = @Content(schema = @Schema(ref = "#/components/schemas/JSONPatch"))) @RequestBody String payload) {
 		log.info("HTTP PATCH Book with id {}", id);
 		JsonPatch patchDocument;
-		try(JsonReader reader = Json.createReader(new StringReader(payload))) {
-			//pay load must be in JSON Array
+		try (JsonReader reader = Json.createReader(new StringReader(payload))) {
+			// pay load must be in JSON Array
 			patchDocument = Json.createPatch(reader.readArray());
 		}
 		ModelMapper modelMapper = new ModelMapper();
 		Book book = bookService.getBookById(id).orElseThrow(() -> new BookNotFoundException(id));
 		BookModel bookModel = modelMapper.map(book, BookModel.class);
-		//convert model targeted for patching to JSON document
+		// convert model targeted for patching to JSON document
 		JsonStructure target = objectMapper.convertValue(bookModel, JsonStructure.class);
-		//apply JSON patch onto JSON document of target model
+		// apply JSON patch onto JSON document of target model
 		JsonValue patched = patchDocument.apply(target);
-		//convert JSON document of target model back to model
+		// convert JSON document of target model back to model
 		BookModel patchedBookModel = objectMapper.convertValue(patched, BookModel.class);
 		Set<ConstraintViolation<BookModel>> violations = validator.validate(patchedBookModel);
-	    if (!violations.isEmpty()) {
-	        throw new ConstraintViolationException(violations);
-	    }
+		if (!violations.isEmpty()) {
+			throw new ConstraintViolationException(violations);
+		}
 		return saveBook(patchedBookModel, book);
 	}
-		
+
+	@Operation(summary = "Delete book by ID")
+	@ApiResponses(value = { @ApiResponse(responseCode = "204", description = "Book deleted successfully") })
 	@DeleteMapping(path = "/{id}")
 	@ResponseStatus(HttpStatus.NO_CONTENT)
-	public void deleteBook(@PathVariable @Min(1) Long id) {
+	public void deleteBook(@Parameter(description = "ID of book to delete") @PathVariable @Min(1) Long id) {
 		log.info("HTTP DELETE Book with id {}", id);
 		try {
 			bookService.deleteBook(id);
 		} catch (EmptyResultDataAccessException exception) {
-			throw new BookNotFoundException(id);			
+			throw new BookNotFoundException(id);
 		}
 	}
-	 
+
 	private BookModel saveBook(BookModel bookModel, Book book) {
 		ModelMapper modelMapper = new ModelMapper();
-		modelMapper.typeMap(BookModel.class,Book.class).addMappings(mapper -> {
+		modelMapper.typeMap(BookModel.class, Book.class).addMappings(mapper -> {
 			mapper.skip(Book::setId);
-	    });
+		});
 		modelMapper.map(bookModel, book);
 		book = bookService.saveBook(book);
-		BookModel savedBookModel= modelMapper.map(book, BookModel.class);
+		BookModel savedBookModel = modelMapper.map(book, BookModel.class);
 		return savedBookModel;
 	}
 
 }
-
